@@ -1,0 +1,112 @@
+-- stored procedures
+
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/gold.dim_products.csv'
+INTO TABLE `gold.dim_products`
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(product_key, product_id, product_number, product_name, category_id, category, subcategory, maintenance, cost, product_line, start_date)
+SET
+  product_key   = NULLIF(TRIM(product_key), ''),
+  product_id    = NULLIF(TRIM(product_id), ''),
+  product_number= NULLIF(TRIM(product_number), ''),
+  product_name  = NULLIF(TRIM(product_name), ''),
+  category_id   = NULLIF(TRIM(category_id), ''),
+  category      = NULLIF(TRIM(category), ''),
+  subcategory   = NULLIF(TRIM(subcategory), ''),
+  maintenance   = NULLIF(TRIM(maintenance), ''),
+  cost          = NULLIF(TRIM(cost), ''),
+  product_line  = NULLIF(TRIM(product_line), ''),
+  start_date    = STR_TO_DATE(NULLIF(TRIM(start_date), ''), '%Y-%m-%d');
+
+truncate table `gold.dim_customers`;
+
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/gold.dim_customers.csv'
+INTO TABLE `gold.dim_customers`
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(customer_key, customer_id, customer_number, first_name, last_name, country, marital_status, gender, birthdate, create_date)
+SET
+  customer_key     = NULLIF(TRIM(customer_key), ''),
+  customer_id      = NULLIF(TRIM(customer_id), ''),
+  customer_number  = NULLIF(TRIM(customer_number), ''),
+  first_name       = NULLIF(TRIM(first_name), ''),
+  last_name        = NULLIF(TRIM(last_name), ''),
+  country          = NULLIF(TRIM(country), ''),
+  marital_status   = NULLIF(TRIM(marital_status), ''),
+  gender           = NULLIF(TRIM(gender), ''),
+  birthdate        = STR_TO_DATE(NULLIF(TRIM(birthdate), ''), '%Y-%m-%d'),
+  create_date      = STR_TO_DATE(NULLIF(TRIM(create_date), ''), '%Y-%m-%d');
+
+
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/gold.fact_sales.csv'
+INTO TABLE `gold.fact_sales`
+FIELDS TERMINATED BY ','     
+ENCLOSED BY '"' 
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(order_number, product_key, customer_key, order_date, shipping_date, due_date, sales_amount, quantity, price)
+SET
+  order_number    = NULLIF(TRIM(order_number), ''),
+  product_key     = NULLIF(TRIM(product_key), ''),
+  customer_key    = NULLIF(TRIM(customer_key), ''),
+  order_date      = NULLIF(TRIM(order_date), ''),
+  shipping_date   = NULLIF(TRIM(shipping_date), ''),
+  due_date        = NULLIF(TRIM(due_date), ''),
+  sales_amount    = NULLIF(TRIM(sales_amount), ''),
+  quantity        = NULLIF(TRIM(quantity), ''),
+  price           = NULLIF(TRIM(price), '');
+
+
+truncate table prac_datebase.`gold.fact_sales`;
+
+SHOW VARIABLES LIKE 'secure_file_priv';
+
+
+
+select year(order_date) as order_year,sum(sales_amount)  as sum_amt , 
+    count(distinct customer_key) as count_cust,sum(quantity) as sum_quan
+        from `gold.fact_sales`  group by year(order_date) order by year(order_date);
+        
+select month(order_date) as order_year,sum(sales_amount)  as sum_amt , 
+    count(distinct customer_key) as count_cust,sum(quantity) as sum_quan
+        from `gold.fact_sales`  group by month(order_date) order by month(order_date);
+        
+select year(order_date),month(order_date) as order_year,sum(sales_amount)  as sum_amt , 
+    count(distinct customer_key) as count_cust,sum(quantity) as sum_quan
+        from `gold.fact_sales` group by year(order_date),month(order_date) order by year(order_date),month(order_date);
+        
+select DATE_FORMAT(order_date, '%Y-%m-01') as order_year,sum(sales_amount)  as sum_amt , 
+    count(distinct customer_key) as count_cust,sum(quantity) as sum_quan
+        from `gold.fact_sales`  group by DATE_FORMAT(order_date, '%Y-%m-01') order by DATE_FORMAT(order_date, '%Y-%m-01');
+  
+  select DATE_FORMAT(order_date, '%M %Y') as order_year,sum(sales_amount)  as sum_amt , 
+    count(distinct customer_key) as count_cust,sum(quantity) as sum_quan
+        from `gold.fact_sales`  group by  DATE_FORMAT(order_date, '%M %Y') order by  DATE_FORMAT(order_date, '%M %Y');
+        
+
+with yearly_product_sales as
+ (select year(f.order_date) as ord_date,
+   p.product_name,
+   sum(f.sales_amount) current_sales from 
+  `gold.fact_sales` as f  join `gold.dim_products` as p   
+   on f.product_key = p.product_key group by year(f.order_date) ,p.product_name)
+	 select ord_date ,product_name, current_sales,
+	   round(avg(current_sales) over(partition by product_name)) avg_sales,
+       current_sales - round(avg(current_sales) over(partition by product_name)) as dif_sales,
+       case when current_sales - round(avg(current_sales) over(partition by product_name)) < 0 then  'below_avg'
+         when current_sales - round(avg(current_sales) over(partition by product_name)) > 0 then 'above_avg'
+	   else 'avg' end as avg_change,
+	   lag(current_sales) over(partition by product_name order by ord_dATE) as py_sales,
+       current_sales - lag(current_sales) over(partition by product_name order by ord_dATE) diff_change,
+       case when current_sales - round(lag(current_sales) over(partition by product_name order by ord_dATE)) < 0 then  'decreased'
+         when current_sales - round(lag(current_sales) over(partition by product_name order by ord_dATE)) > 0 then 'increased'
+	   else 'no cahnge' end as py_change
+     from yearly_product_sales 
+order by product_name ,ord_date;
+
+  --- Main CTE statement --🏆🏆
+        
